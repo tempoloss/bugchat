@@ -1,0 +1,5 @@
+# Canonicalise author identities to one person for git log, shortlog and blame.
+#
+# The service identity below is a placeholder the container commits under.
+Anek <an8kk.sa@gmail.com>
+Anek <an8kk.sa@gmail.com> <bugbot@local>
