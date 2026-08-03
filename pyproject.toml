@@ -1,0 +1,36 @@
+[project]
+name = "bugbot"
+version = "0.1.0"
+description = "Telegram bug-chat watcher that files issues into self-hosted Plane"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28.1",
+  "python-dotenv>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.9.4",
+]
+
+# Никакого devpi-зеркала: бот ставится на рабочую станцию, где внутренний CA
+# в trust store не лежит, а зависимостей всего две.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "T201"]
+ignore = ["E501"]
+# scripts/ — консольные утилиты, печатать результат это их работа
+per-file-ignores = { "scripts/*" = ["T201"] }
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

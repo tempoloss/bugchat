@@ -1,0 +1,3 @@
+# Скрипты уезжают на Linux-хост: CRLF в shebang ломает запуск («bad interpreter»).
+* text=auto eol=lf
+*.cmd text eol=crlf
