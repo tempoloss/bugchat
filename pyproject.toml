@@ -2,6 +2,8 @@
 name = "bugbot"
 version = "0.1.0"
 description = "Telegram bug-chat watcher that files issues into self-hosted Plane"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
   "httpx>=0.28.1",
