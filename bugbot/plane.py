@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from bugbot.config import Config
+from bugbot import triage
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class PlaneClient:
         self._state_names: dict[str, str] = {}
         self._members: dict[str, str] = {}
         self._label_ids: list[str] = []
+        self._labels_by_kind: dict[str, list[str]] = {}
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -154,13 +156,23 @@ class PlaneClient:
 
         self._members = await self._load_members()
 
-        self._label_ids = await self._ensure_labels(self._cfg.plane_labels)
+        # Метки резолвятся один раз, но теперь двумя наборами: общий плюс метка вида.
+        # `_ensure_labels` идемпотентна и переиспользует существующие, так что второй
+        # вызов не создаёт дублей `telegram`.
+        common = await self._ensure_labels(self._cfg.plane_labels)
+        self._label_ids = common
+        self._labels_by_kind = {
+            triage.BUG: common + await self._ensure_labels((self._cfg.plane_bug_label,)),
+            triage.FEATURE: common + await self._ensure_labels((self._cfg.plane_feature_label,)),
+        }
         logger.info(
-            "plane: проект %s (%s), состояние %s, меток %d",
+            "plane: проект %s (%s), состояние %s, меток %d общих + %s/%s по виду",
             self._identifier,
             self._project_id,
             self._cfg.plane_state,
-            len(self._label_ids),
+            len(common),
+            self._cfg.plane_bug_label,
+            self._cfg.plane_feature_label,
         )
 
     async def _ensure_labels(self, names: tuple[str, ...]) -> list[str]:
@@ -181,6 +193,16 @@ class PlaneClient:
                 logger.info("plane: создана метка %s", name)
             ids.append(found)
         return ids
+
+    async def label_names(self, label_ids: list[str]) -> list[str]:
+        """id метки → имя. Нужно, чтобы проверять метку по доске, а не по своим намерениям:
+        `label_ids` эта сборка умеет глотать на create, и проверка локальной переменной
+        прошла бы при пустом наборе меток на самой задаче."""
+        if not label_ids:
+            return []
+        existing = (await self._request("GET", f"{self._project_url}/issue-labels/")).json()
+        by_id = {label["id"]: label["name"] for label in existing}
+        return [by_id[label_id] for label_id in label_ids if label_id in by_id]
 
     async def _load_members(self) -> dict[str, str]:
         """user_id → отображаемое имя: нужно, чтобы написать в чат, кто закрыл задачу."""
@@ -229,21 +251,24 @@ class PlaneClient:
         return self._identifier
 
     # ---- задачи ---------------------------------------------------------
-    async def create_issue(self, *, name: str, description_html: str, priority: str) -> CreatedIssue:
+    async def create_issue(
+        self, *, name: str, description_html: str, priority: str, kind: str = triage.BUG
+    ) -> CreatedIssue:
+        labels = self._labels_by_kind.get(kind) or self._label_ids
         payload = {
             "name": name,
             "description_html": description_html,
             "priority": priority,
             "state": self.state_id(self._cfg.plane_state),
-            "label_ids": self._label_ids,
+            "label_ids": labels,
         }
         issue = (await self._request("POST", f"{self._project_url}/issues/", json=payload)).json()
         issue_id = issue["id"]
 
         # Сериализатор create в части сборок глотает label_ids — досылаем PATCH-ем,
         # иначе метка `telegram` отвалилась бы молча и фильтр на доске стал бы пустым.
-        if self._label_ids and not issue.get("label_ids"):
-            await self._request("PATCH", f"{self._project_url}/issues/{issue_id}/", json={"label_ids": self._label_ids})
+        if labels and not issue.get("label_ids"):
+            await self._request("PATCH", f"{self._project_url}/issues/{issue_id}/", json={"label_ids": labels})
 
         sequence_id = issue["sequence_id"]
         return CreatedIssue(

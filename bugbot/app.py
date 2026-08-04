@@ -713,14 +713,15 @@ class BugBot:
                 return
 
         # `/task` — осознанное решение человека, триаж тут только мешал бы.
-        if not forced and not triage.is_bug_shaped(text, has_media=bool(media), min_text_len=self._cfg.min_text_len):
-            logger.info("не баг, пропускаю #%s: %r", message_id, text[:70])
+        if not forced and not triage.is_actionable(text, has_media=bool(media), min_text_len=self._cfg.min_text_len):
+            logger.info("ни жалоба, ни заявка — пропускаю #%s: %r", message_id, text[:70])
             return
 
         downloads = await self._download(media)
         images = [pair for pair in downloads if pair[0].is_image]
         files = [pair for pair in downloads if not pair[0].is_image]
         priority = triage.priority_for(text)
+        kind = triage.kind_for(text)
         chat_title = chat.get("title") or "личный чат"
 
         def describe(components: list[str]) -> str:
@@ -738,6 +739,7 @@ class BugBot:
             name=triage.make_title(text, author=author, has_media=bool(media), when=when, parts=len(messages)),
             description_html=describe([]),
             priority=priority,
+            kind=kind,
         )
 
         for message in messages:
@@ -784,8 +786,11 @@ class BugBot:
             message_id,
         )
 
+        # Иконка по виду: автор должен сразу видеть, что бот понял его как заявку,
+        # а не как баг. Понял неправильно — скажет тут же, а не через неделю на доске.
         reply_text = (
-            f'🐞 <a href="{html.escape(issue.url)}">{issue.key}</a> · '
+            f"{'💡' if kind == triage.FEATURE else '🐞'} "
+            f'<a href="{html.escape(issue.url)}">{issue.key}</a> · '
             f"{self._cfg.plane_state} · {PRIORITY_LABEL.get(priority, priority)}"
         )
         if components:

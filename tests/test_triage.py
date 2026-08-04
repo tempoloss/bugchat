@@ -8,8 +8,8 @@ WHEN = datetime(2026, 8, 3, 12, 30, tzinfo=UTC)
 MIN_LEN = 120
 
 
-def bug_shaped(text: str, *, has_media: bool = False) -> bool:
-    return triage.is_bug_shaped(text, has_media=has_media, min_text_len=MIN_LEN)
+def actionable(text: str, *, has_media: bool = False) -> bool:
+    return triage.is_actionable(text, has_media=has_media, min_text_len=MIN_LEN)
 
 
 @pytest.mark.parametrize(
@@ -24,31 +24,31 @@ def bug_shaped(text: str, *, has_media: bool = False) -> bool:
     ],
 )
 def test_complaints_become_issues(text):
-    assert bug_shaped(text)
+    assert actionable(text)
 
 
 @pytest.mark.parametrize("text", ["ок", "спасибо!", "+", "когда посмотрите?", "доброе утро", "я в отпуске до среды"])
 def test_chatter_is_ignored(text):
-    assert not bug_shaped(text)
+    assert not actionable(text)
 
 
 def test_media_alone_is_enough():
-    assert bug_shaped("", has_media=True)
-    assert bug_shaped("вот", has_media=True)
+    assert actionable("", has_media=True)
+    assert actionable("вот", has_media=True)
 
 
 def test_long_message_without_keywords_still_files():
-    assert bug_shaped("а" * MIN_LEN)
-    assert not bug_shaped("а" * (MIN_LEN - 1))
+    assert actionable("а" * MIN_LEN)
+    assert not actionable("а" * (MIN_LEN - 1))
 
 
 def test_fix_report_is_not_a_bug_even_with_screenshot():
-    assert not bug_shaped("уже работает, спасибо", has_media=True)
-    assert not bug_shaped("пофиксил на проде")
+    assert not actionable("уже работает, спасибо", has_media=True)
+    assert not actionable("пофиксил на проде")
 
 
 def test_fix_report_with_new_complaint_is_a_bug():
-    assert bug_shaped("пофиксил экспорт, но теперь не открывается карточка")
+    assert actionable("пофиксил экспорт, но теперь не открывается карточка")
 
 
 @pytest.mark.parametrize(
@@ -191,3 +191,60 @@ def test_single_message_keeps_only_its_first_line():
     """Одно сообщение: первая строка — это уже саммари, добирать абзацы не надо."""
     text = "Не грузится список дел\n\nподробности ниже, воспроизводится у всех"
     assert triage.make_title(text, author="@t", has_media=False, when=WHEN, parts=1) == "Не грузится список дел"
+
+
+# --- заявки на функционал -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "добавьте кнопку экспорта в реестр",
+        "можно ли добавить фильтр по дате",
+        "хотелось бы видеть сумму итогом",
+        "не хватает поиска по ИИН",
+        "предлагаю вынести это в отдельную вкладку",
+        "было бы удобно сортировать по дате",
+        "нужна возможность выгрузить в excel",
+        "запилите тёмную тему пж",
+    ],
+)
+def test_feature_requests_are_filed(text):
+    assert actionable(text) is True
+    assert triage.kind_for(text) == triage.FEATURE
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Прошедшее время — это отчёт о сделанном, а не заявка. Стем `добав`
+        # целиком поймал бы и его.
+        "добавили новую колонку в отчёт",
+        "добавил индекс, стало быстрее",
+    ],
+)
+def test_past_tense_is_not_a_request(text):
+    assert triage.kind_for(text) == triage.BUG
+
+
+def test_complaint_beats_request_in_one_message():
+    # «Добавьте фильтр, а то выгрузка падает» — это про падение. Заявка подождёт,
+    # а баг помечать низким приоритетом было бы прямо вредно.
+    text = "добавьте фильтр, а то выгрузка падает с 500"
+    assert triage.kind_for(text) == triage.BUG
+    assert triage.priority_for(text) == "high"
+
+
+def test_a_request_is_never_urgent():
+    # Автор заявки всегда считает её важной. Дай ему выставлять срочность словом —
+    # и через месяц вся доска urgent.
+    assert triage.priority_for("СРОЧНО добавьте выгрузку в pdf") == "low"
+
+
+def test_short_request_still_gets_filed():
+    # Заявка обычно короче порога min_text_len и без баг-лексики: до появления
+    # словаря заявок такое сообщение молча терялось.
+    text = "добавьте сортировку"
+    assert len(text) < MIN_LEN
+    assert actionable(text) is True
+    assert triage.kind_for(text) == triage.FEATURE

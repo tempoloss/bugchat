@@ -35,6 +35,24 @@ _RESOLVED_RE = re.compile(
 )
 """Отчёт «починено». Такое не заводим — если только в том же тексте нет новой жалобы."""
 
+_FEATURE_RE = re.compile(
+    # Только явные формы просьбы. «Добавили колонку» — это отчёт о сделанном,
+    # а не заявка, поэтому стем `добав` целиком тут не годится: перечислены
+    # повелительные и желательные формы, прошедшее время не подходит нарочно.
+    r"добавь|добавьте|добавить|добавлени|дополнить|реализовать|запили(?:те|ть)?"
+    r"|хотелось\s+бы|хочется\s+чтоб|было\s+бы\s+(?:круто|удобно|хорошо|неплохо|здорово|полезно)"
+    r"|не\s+хватает|нехватает|нужна\s+возможность|нужен\s+функционал"
+    r"|предлагаю|предложение|пожелание"
+    r"|можно\s+ли\s+(?:добав|сдела|вывест|реализ|прикрут)"
+    r"|фич[аиу]|фич-реквест|feature\s*request|\bfeature\b",
+    re.IGNORECASE,
+)
+"""Лексика заявки на функционал. Осознанно узкая: пропущенную заявку человек
+заведёт через `/task`, а ложная засоряет доску молча."""
+
+BUG = "bug"
+FEATURE = "feature"
+
 _TITLE_TRIM_RE = re.compile(r"^[\s\-—–*•>#]+|[\s\-—–*•]+$")
 _HASHTAG_RE = re.compile(r"#\w+")
 _WS_RE = re.compile(r"[ \t\u00a0]+")
@@ -58,8 +76,8 @@ _TITLE_ENOUGH = 40
 """Достаточная длина, чтобы перестать добирать сообщения серии в заголовок."""
 
 
-def is_bug_shaped(text: str, *, has_media: bool, min_text_len: int) -> bool:
-    """Стоит ли заводить задачу по этому сообщению."""
+def is_actionable(text: str, *, has_media: bool, min_text_len: int) -> bool:
+    """Стоит ли заводить задачу по этому сообщению — жалобу или заявку."""
     normalized = text.strip()
     has_bug_words = bool(_BUG_RE.search(normalized))
 
@@ -68,13 +86,35 @@ def is_bug_shaped(text: str, *, has_media: bool, min_text_len: int) -> bool:
         return False
     if has_bug_words:
         return True
+    if _FEATURE_RE.search(normalized):
+        return True
     if has_media:
         return True
     return len(normalized) >= min_text_len
 
 
+def kind_for(text: str) -> str:
+    """`bug` или `feature`.
+
+    Жалоба сильнее заявки: «добавьте фильтр, а то выгрузка падает» — это про
+    падение, а фильтр подождёт. Всё, в чём нет лексики заявки, остаётся багом:
+    длинное сообщение и скриншот без слов исторически заводились как баг, и менять
+    это молча значило бы переклассифицировать половину доски.
+    """
+    if _BUG_RE.search(text):
+        return BUG
+    return FEATURE if _FEATURE_RE.search(text) else BUG
+
+
 def priority_for(text: str) -> str:
-    """Приоритет Plane: urgent / high / none."""
+    """Приоритет Plane: urgent / high / low / none.
+
+    Заявка не бывает срочной. Автор заявки почти всегда считает её важной, и если
+    дать ему выставлять срочность словом «срочно», доска через месяц будет вся
+    urgent. Просьба — не инцидент, поэтому у заявок фиксированный `low`.
+    """
+    if kind_for(text) == FEATURE:
+        return "low"
     if _URGENT_RE.search(text):
         return "urgent"
     if _BUG_RE.search(text):

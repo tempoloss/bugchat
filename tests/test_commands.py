@@ -48,6 +48,8 @@ def make_config(db_path: Path) -> Config:
         plane_state="Backlog",
         plane_cancel_state="Cancelled",
         plane_labels=("telegram",),
+        plane_bug_label="bug",
+        plane_feature_label="feature",
         plane_verify_tls=False,
         db_path=db_path,
         min_text_len=120,

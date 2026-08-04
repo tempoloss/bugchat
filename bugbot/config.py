@@ -60,6 +60,8 @@ class Config:
     plane_state: str
     plane_cancel_state: str
     plane_labels: tuple[str, ...]
+    plane_bug_label: str
+    plane_feature_label: str
     plane_verify_tls: bool
 
     db_path: Path
@@ -86,9 +88,8 @@ class Config:
         if not email or not password:
             raise SystemExit("PLANE_EMAIL / PLANE_PASSWORD не заданы — скопируйте .env.example в .env")
 
-        # У этих трёх нет значений по умолчанию нарочно: подставленный хост или
-        # воркспейс — это тихий логин не туда, куда человек думает. Пусть падает
-        # на старте, а не заводит задачи в чужом проекте.
+        # Без дефолтов нарочно: подставленный чужой хост или воркспейс — это тихий
+        # логин не туда, куда человек думает. Пусть падает на старте.
         base = _text("PLANE_BASE", "").rstrip("/")
         workspace = _text("PLANE_WORKSPACE", "")
         project = _text("BUGBOT_PLANE_PROJECT", "")
@@ -107,7 +108,19 @@ class Config:
         db_raw = _text("BUGBOT_DB", "state.db")
         db_path = Path(db_raw) if Path(db_raw).is_absolute() else ROOT / db_raw
 
-        labels = tuple(x.strip() for x in _text("BUGBOT_PLANE_LABELS", "telegram,bug").split(",") if x.strip())
+        bug_label = _text("BUGBOT_PLANE_BUG_LABEL", "bug")
+        feature_label = _text("BUGBOT_PLANE_FEATURE_LABEL", "feature")
+
+        # Метки вида отделены от общих, иначе заявка приезжала бы помеченной как баг.
+        # Общий набор фильтруется от них нарочно: у работающих установок в .env стоит
+        # ещё старое `telegram,bug`, и без этого фильтра каждая заявка получила бы обе
+        # метки — расхождение, которое видно только глазами на доске.
+        kind_labels = {bug_label.lower(), feature_label.lower()}
+        labels = tuple(
+            x.strip()
+            for x in _text("BUGBOT_PLANE_LABELS", "telegram").split(",")
+            if x.strip() and x.strip().lower() not in kind_labels
+        )
 
         return cls(
             bot_token=token,
@@ -120,6 +133,8 @@ class Config:
             plane_state=_text("BUGBOT_PLANE_STATE", "Backlog"),
             plane_cancel_state=_text("BUGBOT_PLANE_CANCEL_STATE", "Cancelled"),
             plane_labels=labels,
+            plane_bug_label=bug_label,
+            plane_feature_label=feature_label,
             # PLANE_INSECURE=1 уже стоит в окружении у большинства — внутренний CA не в trust store.
             plane_verify_tls=not _flag("PLANE_INSECURE", False),
             db_path=db_path,
