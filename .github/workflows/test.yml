@@ -1,0 +1,40 @@
+# Lint, test, and build the image so a broken Dockerfile surfaces before a deploy
+# rather than during one.
+#
+# There is no deploy job on purpose. Deploying from CI would mean a private key in
+# repository secrets and a runner allowed to reach the host, for a project that
+# ships with one command. The pipeline answers "is it broken"; a person ships.
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --python 3.12
+
+      - name: lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: tests
+        run: uv run pytest -q
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: build
+        run: docker build -t bugchat:ci .
