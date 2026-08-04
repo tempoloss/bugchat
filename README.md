@@ -36,9 +36,17 @@ and a one-tap cancel button. A request gets `💡` instead, so the author sees h
 bot understood them and can correct it immediately rather than a week later on the
 board.
 
-## The three decisions that matter
+## The decisions that matter
 
-Everything above is plumbing. These are the parts worth stealing.
+Everything above is plumbing. These are the parts worth stealing, and each one is
+written up with what it costs.
+
+| decision | why | detail |
+|---|---|---|
+| A burst from one author is one report | a bug is typed in fragments, not sentences | [ADR 1](docs/adr/0001-a-burst-of-messages-is-one-report.md) |
+| Session auth, not an API key | the documented endpoint can be absent from the build | [ADR 2](docs/adr/0002-session-auth-not-an-api-key.md) |
+| A short title gets author and time | three tasks called «не работает» are indistinguishable | [ADR 3](docs/adr/0003-a-short-title-is-not-a-title.md) |
+| A request is never urgent | let a word set urgency and every request has it | [ADR 4](docs/adr/0004-a-request-is-never-urgent.md) |
 
 ### One report is one task, not three fragments
 
@@ -224,6 +232,7 @@ bugbot/telegram.py    Bot API
 bugbot/store.py       SQLite: offsets, message -> task, album and burst buffers
 bugbot/app.py         the loops and the decisions between them
 scripts/live_check.py the real path against a real Plane, Telegram stubbed
+docs/adr/             why each load-bearing decision was made, and what it costs
 ```
 
 ## Known limits
