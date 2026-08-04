@@ -1,5 +1,5 @@
-# Canonicalise author identities to one person for git log, shortlog and blame.
+# Canonicalise author identities for git log, shortlog and blame.
 #
-# The service identity below is a placeholder the container commits under.
-Anek <an8kk.sa@gmail.com>
-Anek <an8kk.sa@gmail.com> <bugbot@local>
+# A container or a CI runner commits under a placeholder identity rather than a
+# person, so map it here instead of letting shortlog invent a second contributor.
+tempoloss <304178922+tempoloss@users.noreply.github.com> <bugbot@local>
